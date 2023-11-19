@@ -1,1 +1,596 @@
+# Description
+# ===========
+# Protocol : String in UPPERCASE
+# Code     : Some protocols name this also data, address, wand_id, rc_code1
+# Command  : Some protocols name this also nbits, magnitude, rc_code2
+# Repeat   : Optionally set the code to be repeated a number of times. Otherwise use 1.
+#
+# Implemented protocols
+# - NEC (adress=0xF608	)
+#   o POWER       0xDE21
+#   o MUTE        0xDD22
+#   o TV/R        0xDF20
+#   o 1           0xDC23
+#   o 2           0xDB24
+#   o 3           0xDA25
+#   o 4           0xD926
+#   o 5           0xD827
+#   o 6           0xD728
+#   o 7           0xD629
+#   o 8           0xD52A
+#   o 9           0xD42B
+#   o 0           0xD22D
+#   o CH+         0xD32C
+#   o CH-         0xD02F
+#   o VOL+        0xD12E
+#   o VOL-        0xCF30
+#   o REC         0xCE31
+#   o STOP        0xCD32
+#   o PLAY        0xCC33
+#   o PAUSE       0xCB34
+#   o ARROW UP    0xCA35
+#   o ARROW DOWN  0xC639
+#   o ARROW LEFT  0xC936
+#   o ARROW RIGHT 0xC738
+#   o OK          0xC837
+#   o MENU        0xC53A
+#   o BACK        0xC43B
+#   o INFO        0xC33C
+#   o EXIT        0xC23D
+#   o EPG         0xC13E
+#   o FAV         0xC03F
+#   o |<<         0x9F60
+#   o >>|         0x9E61
+#   o USB         0x9D62
+#   o FUNC        0x9C63
+#   o SIGNAL      0x9B64
+#   o SAT         0x9A65
+#   o RATIO(RED)  0x9966
+#   o OPT(GREEN)  0x9867
+#   o AUDIO(YELLOW)  0x9768
+#   o SLEEP(BLUE)  0x9669
+#
+#
+# Details
+# -------
+# MCU used is TUYA CBU (bk7231n)
+#
+# GPIO	Component	Description
+# 24	    LED   	  Blue LED - Link status
+# 08	    IRrecv  	IR Receiver
+# 26	    Button  	Button
+# 07	    IRsend	  IR Transmitter
+
+
+esphome:
+  name: ir-remote
+  friendly_name: Ir Remote
+  comment: "Living room ESP32 controller"
+  project:
+    name: "ir.pulte"
+    version: "1.8.0"
+
+bk72xx:
+  board: generic-bk7231n-qfn32-tuya
+
+# Enable logging
+logger:  
+
+# Enable Home Assistant API
+api:
+  reboot_timeout: 0s # иначе перезагружается при отключении от hassio 
+  encryption:
+    key: "="
+  services:
+    - service: send_ir
+      variables:
+        protocol: string
+        code: string
+        command: string
+        repeats: string
+      then:
+        - lambda: 'ESP_LOGD("main", "Protocol= %s - Code= %s - Command= %s",  protocol.c_str(), code.c_str(), command.c_str() ); '
+        - if:
+            condition: # --=[ *** DISH *** ]=--
+              lambda: 'return protocol == "DISH";'
+            then:
+              - logger.log: "Sending DISH data...!"
+              - remote_transmitter.transmit_dish:
+                  address: !lambda |-
+                        return std::stoi( code );
+                  command: !lambda |-
+                        return std::stoi( command );
+        - if:
+            condition: # --=[ *** JVC *** ]=--
+              lambda: 'return protocol == "JVC";'
+            then:
+              - logger.log: "Sending JVC data...!"
+              - remote_transmitter.transmit_jvc:
+                  data: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;                      
+        - if:
+            condition: # --=[ *** LG *** ]=--
+              lambda: 'return protocol == "LG";'
+            then:
+              - logger.log: "Sending LG data...!"
+              - remote_transmitter.transmit_lg:
+                  data: !lambda |-
+                       int i;
+                       sscanf(code.c_str(), "%x", &i );
+                       return i;
+                  nbits: !lambda |-
+                        return std::stoi( command );
+        - if:
+            condition: # --=[ *** MAGIQUEST *** ]=--
+              lambda: 'return protocol == "MAGIQUEST";'
+            then:
+              - logger.log: "Sending MAGIQUEST data...!"
+              - remote_transmitter.transmit_magiquest:
+                  wand_id: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;
+                  magnitude: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+        - if:
+            condition: # --=[ *** NEC *** ]=--
+              lambda: 'return protocol == "NEC";'
+            then:
+              - logger.log: "Sending NEC data...!"
+              - remote_transmitter.transmit_nec:
+                  address: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;
+                  command: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+                    
+        - if:
+            condition: # --=[ *** PANASONIC *** ]=--
+              lambda: 'return protocol == "PANASONIC";'
+            then:
+              - logger.log: "Sending PANASONIC data...!"
+              - remote_transmitter.transmit_panasonic:
+                  address: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i; 
+                  command: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+        - if:
+            condition: # --=[ *** PIONEER *** ]=--
+              lambda: 'return protocol == "PIONEER";'
+            then:
+              - logger.log: "Sending PIONEER data...!"
+              - remote_transmitter.transmit_pioneer:
+                  rc_code_1: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;
+                  rc_code_2: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+                  repeat:
+                    times: !lambda |-
+                        return std::stoi( repeats );
+        - if:
+            condition: # --=[ *** PRONTO *** ]=--
+              lambda: 'return protocol == "PRONTO";'
+            then:
+              - logger.log: "Sending PRONTO data...!"
+              - remote_transmitter.transmit_pronto:
+                  data: !lambda |-
+                      return code.c_str();
+        - if:
+            condition: # --=[ *** RC5 *** ]=--
+              lambda: 'return protocol == "RC5";'
+            then:
+              - logger.log: "Sending RC5 data...!"
+              - remote_transmitter.transmit_rc5:
+                  address: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i; 
+                  command: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+        - if:
+            condition: # --=[ *** RC6 *** ]=--
+              lambda: 'return protocol == "RC6";'
+            then:
+              - logger.log: "Sending RC6 data...!"
+              - remote_transmitter.transmit_rc6:
+                  address: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;
+                  command: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+        - if:
+            condition: # --=[ *** SAMSUNG *** ]=--
+              lambda: 'return protocol == "SAMSUNG";'
+            then:
+              - logger.log: "Sending SAMSUNG data...!"
+              - remote_transmitter.transmit_samsung:
+                  data: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i; 
+                  nbits: !lambda |-
+                        return std::stoi( command );   
+        - if:
+            condition: # --=[ *** SAMSUNG36 *** ]=--
+              lambda: 'return protocol == "SAMSUNG36";'
+            then:
+              - logger.log: "Sending SAMSUNG36 data...!"
+              - remote_transmitter.transmit_samsung36:
+                  address: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;
+                  command: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;
+        - if:
+            condition: # --=[ *** SONY *** ]=--
+              lambda: 'return protocol == "SONY";'
+            then:
+              - logger.log: "Sending SONY data...!"
+              - remote_transmitter.transmit_sony:
+                  data: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i; 
+                  nbits: !lambda |-
+                        return std::stoi( command );
+        - if:
+            condition: # --=[ *** TOSHIBA AC *** ]=--
+              lambda: 'return protocol == "TOSHIBA_AC";'
+            then:
+              - logger.log: "Sending TOSHIBA data...!"
+              - remote_transmitter.transmit_toshiba_ac:
+                  rc_code_1: !lambda |-
+                      int i;
+                      sscanf( code.c_str(), "%x", &i );
+                      return i;
+                  rc_code_2: !lambda |-
+                      int i;
+                      sscanf( command.c_str(), "%x", &i );
+                      return i;         
+
+ota:
+  password: "if"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot in case wifi connection fails
+  ap:
+    ssid: "Ir-Remote Fallback Hotspot"
+    password: ""
+
+captive_portal:
+    
+web_server:
+  port: 80
+
+remote_transmitter:
+  pin: P7
+  carrier_duty_percent: 50%
+
+remote_receiver:
+  pin:
+    number: P8
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  dump: all
+
+binary_sensor:
+  - platform: gpio
+    pin: 
+      number: 26      
+    name: "IR Controller Button"
+    icon: "mdi:gate"    
+    on_click:    
+      then:
+        - logger.log: "button Clicked"
+
+status_led:
+  pin: 
+    number: 24
+    inverted: true
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: IR Controller IP Address
+  - platform: libretiny
+    version:
+      name: IR Controller LibreTiny Version
+
+sensor:
+  - platform: wifi_signal
+    name: IR Controller WiFi
+    update_interval: 60s
+  - platform: uptime
+    name: IR Controller Uptime
+    filters:
+      - lambda: return x / 60.0;
+    unit_of_measurement: minutes
+    
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    timezone: Europe/Minsk    
+
+button:
+  - platform: template
+    name: "POWER NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xDE21
+  - platform: template
+    name: "MUTE NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xDD22
+  - platform: template
+    name: "TV/R NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xDF20
+  - platform: template
+    name: "1 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xDC23
+  - platform: template
+    name: "2 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xDB24
+  - platform: template
+    name: "3 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xDA25
+  - platform: template
+    name: "4 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD926
+  - platform: template
+    name: "5 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD827
+  - platform: template
+    name: "6 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD728
+  - platform: template
+    name: "7 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD629
+  - platform: template
+    name: "8 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD52A
+  - platform: template
+    name: "9 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD42B
+  - platform: template
+    name: "0 NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD22D
+  - platform: template
+    name: "CH+ NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD32C
+  - platform: template
+    name: "CH- NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD02F
+  - platform: template
+    name: "VOL+ NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xD12E
+  - platform: template
+    name: "VOL- NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xCF30
+  - platform: template
+    name: "REC NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xCE31
+  - platform: template
+    name: "STOP NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xCD32
+  - platform: template
+    name: "PLAY NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xCC33
+  - platform: template
+    name: "PAUSE NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xCB34
+  - platform: template
+    name: "ARROW UP NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xCA35
+  - platform: template
+    name: "ARROW DOWN NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC639
+  - platform: template
+    name: "ARROW LEFT NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC936
+  - platform: template
+    name: "ARROW RIGHT NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC738
+  - platform: template
+    name: "OK NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC837
+  - platform: template
+    name: "MENU NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC53A
+  - platform: template
+    name: "BACK NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC43B
+  - platform: template
+    name: "INFO NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC33C
+  - platform: template
+    name: "EXIT NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC23D
+  - platform: template
+    name: "EPG NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC13E
+  - platform: template
+    name: "FAV NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0xC03F
+  - platform: template
+    name: "|<< NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9F60
+  - platform: template
+    name: ">>| NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9E61
+  - platform: template
+    name: "USB NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9D62
+  - platform: template
+    name: "FUNC NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9C63
+  - platform: template
+    name: "SIGNAL NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9B64
+  - platform: template
+    name: "SAT NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9A65
+  - platform: template
+    name: "RATIO(RED) NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9966
+  - platform: template
+    name: "OPT(GREEN) NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9867
+  - platform: template
+    name: "AUDIO(YELLOW) NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9768
+  - platform: template
+    name: "SLEEP(BLUE) NEC"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xF608
+          command: 0x9669
+
 
